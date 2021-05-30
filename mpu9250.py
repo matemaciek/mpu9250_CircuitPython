@@ -15,13 +15,13 @@ import time
 
 class IMU:
     """Driver for the MPU9250 9-DoF IMU accelerometer, magnetometer, gyroscope."""
-    
+
     # Class-level buffers for reading and writing data with the sensor.
     # This reduces memory allocations but means the code is not re-entrant or
     # thread safe!
     _R_BUFFER = bytearray(6)
     _W_BUFFER = bytearray(2)
-    
+
     def __init__(self, i2c, gyro_indx=0, accel_indx=0, samp_rate_div=0):
         self._bus = i2c
         while not i2c.try_lock():
@@ -31,7 +31,7 @@ class IMU:
         self._mag_range = MAG_CONFIG_VAL
         self._init_mpu6050(gyro_indx, accel_indx, samp_rate_div)
         self._init_ak8963()
-         
+
     def _init_mpu6050(self, gyro_indx, accel_indx, samp_rate_div):
         # reset all sensors
         self._write_mpu(PWR_MGMT_1, 0x80)
