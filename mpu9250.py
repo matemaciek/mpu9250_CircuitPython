@@ -110,7 +110,8 @@ class IMU:
         return self._read_xyz(MPU6050_ADDR, address)
 
     def _read_xyz_ak(self, address):
-        return self._read_xyz(AK8963_ADDR, address)
+        (x,y,z) = self._read_xyz(AK8963_ADDR, address)
+        return (y,x,-z)
 
     def _write(self, device, address, val):
         self._W_BUFFER[0] = address & 0xFF
