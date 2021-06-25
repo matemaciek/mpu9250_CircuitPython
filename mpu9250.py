@@ -72,7 +72,13 @@ class IMU:
 
     @property
     def raw_mag(self):
-        return self._read_xyz_ak(MAG_OUT)
+        result_invalid = True
+        while result_invalid:
+            result = self._read_xyz_ak(MAG_OUT)
+            result_invalid = self._read_ak(AK8963_ST2, 1)[0] & 0x80
+            if result_invalid:
+                print("Magnetometer overflow, retrying.")
+        return result
 
     @property
     def raw_tmp(self):
@@ -107,10 +113,10 @@ class IMU:
         return self._read(AK8963_ADDR, address, count)
 
     def _read_xyz_mpu(self, address):
-        return self._read_xyz(MPU6050_ADDR, address)
+        return self._read_xyz(MPU6050_ADDR, address, False)
 
     def _read_xyz_ak(self, address):
-        (x,y,z) = self._read_xyz(AK8963_ADDR, address)
+        (x,y,z) = self._read_xyz(AK8963_ADDR, address, True)
         return (y,x,-z)
 
     def _write(self, device, address, val):
@@ -125,13 +131,13 @@ class IMU:
         self._bus.writeto_then_readfrom(device, buffer, buffer, out_end=1)
         return buffer
 
-    def _read_xyz(self, device, address):
+    def _read_xyz(self, device, address, swap):
         bytes = self._read(device, address, 6)
-        return [_to_long(bytes, 2*i) for i in range(3)]
+        return [_to_long(bytes, 2*i, swap) for i in range(3)]
 
-def _to_long(buffer, index=0):
+def _to_long(buffer, index=0, swap=False):
     # combine high and low for unsigned bit value
-    value = ((buffer[index] << 8) | buffer[index+1])
+    value = ((buffer[index+swap] << 8) | buffer[index+(not swap)])
     # convert to signed value
     if(value > 32768):
         value -= 65536
@@ -152,7 +158,8 @@ GYRO_OUT     = 0x43
 
 #AK8963 registers
 AK8963_ADDR  = 0x0C
-MAG_OUT      = 0x04
+MAG_OUT      = 0x03
+AK8963_ST2   = 0x09
 AK8963_CNTL  = 0x0A
 AK8963_ASAX  = 0x10
 
@@ -161,3 +168,4 @@ GYRO_CONFIG_VALS = [250.0, 500.0, 1000.0, 2000.0] # degrees/sec
 ACCEL_CONFIG_REGS = [0b00000, 0b01000, 0b10000, 0b11000] # byte registers
 ACCEL_CONFIG_VALS = [2.0, 4.0, 8.0, 16.0] # g (g = 9.81 m/s^2)
 MAG_CONFIG_VAL = 4800.0 # magnetometer sensitivity: 4800 uT
+
