@@ -31,6 +31,9 @@ class IMU:
         self._mag_range = MAG_CONFIG_VAL
         self._init_mpu6050(gyro_indx, accel_indx, samp_rate_div)
         self._init_ak8963()
+        self._gyr_offset = [0,0,0]
+        self._mag_offset = [0,0,0]
+        self._acc_offset = [(1<<15, 0),(1<<15, 0),(1<<15, 0)]
 
     def _init_mpu6050(self, gyro_indx, accel_indx, samp_rate_div):
         # reset all sensors
@@ -64,21 +67,26 @@ class IMU:
 
     @property
     def raw_acc(self):
-        return self._read_xyz_mpu(ACCEL_OUT)
+        base = self._read_xyz_mpu(ACCEL_OUT)
+        offset = self._acc_offset
+        return [((1<<15)*base[i]//offset[i][0] + offset[i][1]) for i in range(3)]
 
     @property
     def raw_gyr(self):
-        return self._read_xyz_mpu(GYRO_OUT)
+        base = self._read_xyz_mpu(GYRO_OUT)
+        offset = self._gyr_offset
+        return [base[i] - offset[i] for i in range(3)]
 
     @property
     def raw_mag(self):
         result_invalid = True
         while result_invalid:
-            result = self._read_xyz_ak(MAG_OUT)
+            base = self._read_xyz_ak(MAG_OUT)
             result_invalid = self._read_ak(AK8963_ST2, 1)[0] & 0x80
             if result_invalid:
                 print("Magnetometer overflow, retrying.")
-        return result
+            offset = self._mag_offset
+        return [base[i] - offset[i] for i in range(3)]
 
     @property
     def raw_tmp(self):
@@ -99,6 +107,29 @@ class IMU:
     @property
     def tmp(self):
         return (self.raw_tmp / 333.87) + 21.0
+    
+    def cal_acc(self, data):
+        result = {}
+        for wall, values in data.items():
+            samples = len(values)
+            result[wall] = [sum(l)//samples for l in zip(*values)]
+        return result
+    
+    def cal_gyr(self, data):
+        samples = len(data)
+        return [sum(l)//samples for l in zip(*data)]
+    
+    def cal_mag(self, data):
+        result = {}
+        for axis, values in data.items():
+            result[axis] = [(max(l)+min(l))//2 for l in zip(*values)]
+        return result
+    
+    def calibrate(self, data):
+        self._gyr_offset = data["gyr"]
+        self._mag_offset = [(data["mag"][ax][ai]+data["mag"][bx][bi])//2 for (ax, ai, bx, bi) in [('y', 0, 'z', 0), ('x', 0, 'z', 1), ('x', 1, 'y', 1)]]
+        extremes = [(min(data["acc"][axis+'-']), max(data["acc"][axis+'+'])) for axis in ['x', 'y', 'z']]
+        self._acc_offset = [(ma-mi, (1<<14)*(ma+mi)//(mi-ma)) for (mi,ma) in extremes]
 
     def _write_mpu(self, address, val):
         self._write(MPU6050_ADDR, address, val)
