@@ -24,8 +24,6 @@ class IMU:
 
     def __init__(self, i2c, gyro_indx=0, accel_indx=0, samp_rate_div=0):
         self._bus = i2c
-        while not i2c.try_lock():
-            pass
         self._gyro_range = GYRO_CONFIG_VALS[gyro_indx]
         self._accel_range = ACCEL_CONFIG_VALS[accel_indx]
         self._mag_range = MAG_CONFIG_VAL
@@ -153,13 +151,19 @@ class IMU:
     def _write(self, device, address, val):
         self._W_BUFFER[0] = address & 0xFF
         self._W_BUFFER[1] = val & 0xFF
+        while not self._bus.try_lock():
+            pass
         self._bus.writeto(device, self._W_BUFFER)
+        self._bus.unlock()
         time.sleep(0.01)
 
     def _read(self, device, address, count):
         buffer = self._R_BUFFER if count == 6 else bytearray(count)
         buffer[0] = address & 0xFF
+        while not self._bus.try_lock():
+            pass
         self._bus.writeto_then_readfrom(device, buffer, buffer, out_end=1)
+        self._bus.unlock()
         return buffer
 
     def _read_xyz(self, device, address, swap):
